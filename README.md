@@ -1,224 +1,154 @@
-# Heart Disease Correlation Analysis Dashboard
+# Heart Disease Risk Factor Analysis Dashboard
 
 ## 1. Project Overview
 
 This project explores the relationships between demographic, clinical, and lifestyle variables and heart disease status.
 
-An interactive web application is developed using **Streamlit**, **Pandas**, **NumPy**, and **Plotly**. The dashboard allows users to examine the dataset, visualize correlations, and explore the distribution of heart disease status.
+An interactive web application is developed using **Streamlit**, **Pandas**, **NumPy**, **Plotly**, and **Scikit-Learn**. The dashboard allows users to examine the dataset, visualize both linear correlations and non-linear machine learning feature importances, and dynamically explore how data transformation affects results.
 
 The project addresses the following questions:
 
-1. Which selected variables have the strongest linear correlations with heart disease status?
-2. How are the selected health indicators correlated with one another?
-3. How can interactive visualizations support exploratory data analysis?
+1. Which selected variables have the strongest **linear correlations** with heart disease status?
+2. Why do simple linear correlations fail to capture medical reality, and how can **non-linear machine learning models** (Random Forest) reveal the true predictive power of variables?
+3. How does **Feature Engineering (Medical Binning)** and handling missing data dynamically impact the analytical results?
 
 ## 2. Dataset
 
-The dataset, `heart_disease.csv`, contains approximately 10,000 records.
+The dataset, `heart_disease.csv`, contains approximately 10,000 records (observation unit = 1 patient).
 
-The analysis focuses on the following 10 variables:
-
-- BMI
-- Blood Pressure
-- Homocysteine Level
-- Triglyceride Level
-- Alcohol Consumption
-- Cholesterol Level
-- Gender
-- Smoking
-- Age
-- High Blood Pressure
+The analysis focuses on the following core variables:
+- **Clinical & Demographics:** BMI, Blood Pressure, Homocysteine Level, Triglyceride Level, Cholesterol Level, Fasting Blood Sugar, Age, Gender
+- **Lifestyle:** Smoking, Alcohol Consumption, High Blood Pressure
 
 **Target Variable:** `Heart Disease Status`, with values of `Yes` and `No`.
 
-Other variables in the original dataset are excluded from the current correlation analysis.
+*Note:* The dataset suffers from severe **class imbalance** (~80% No, ~20% Yes) and a high missing rate (~26%) in the `Alcohol Consumption` variable.
 
 ## 3. Technologies and Requirements
 
 The project uses Python and the following libraries:
 
 - **Streamlit:** Interactive web application framework
-- **Pandas:** Data loading and manipulation
-- **NumPy:** Numerical operations
+- **Pandas & NumPy:** Data loading and manipulation
 - **Plotly:** Interactive charts and visualizations
+- **Scikit-Learn:** Machine learning (Random Forest Classifier)
 
 ### Installation
 
 Install the required dependencies:
 
 ```bash
-pip install streamlit pandas numpy plotly
-```
+pip install streamlit pandas numpy plotly scikit-learn
+Alternatively, create a requirements.txt file containing:
 
-Alternatively, create a `requirements.txt` file containing:
-
-```text
+text
 streamlit
 pandas
 numpy
 plotly
-```
-
+scikit-learn
 Then install the dependencies with:
 
-```bash
+bash
 pip install -r requirements.txt
-```
+4. How to Run the Application
+Download or clone the project files.
 
-## 4. How to Run the Application
+Ensure that app.py and heart_disease.csv are in the same directory.
 
-1. Download or clone the project files.
-2. Ensure that `app.py` and `heart_disease.csv` are in the same directory.
-3. Open a terminal in the project directory.
-4. Run the following command:
+Open a terminal in the project directory.
 
-   ```bash
-   streamlit run app.py
-   ```
+Run the following command:
 
-5. Open the application in a browser at:
+bash
+streamlit run app.py
+Open the application in a browser at http://localhost:8501. The application also supports uploading a CSV file through the sidebar.
 
-   `http://localhost:8501`
-
-The application also supports uploading a CSV file through the sidebar.
-
-## 5. Project Structure
-
-```text
+5. Project Structure
+text
 HeartDiseaseProject/
 ├── app.py
 ├── heart_disease.csv
 ├── README.md
 └── requirements.txt
-```
+6. Streamlit Dashboard Features
+6.1 Dynamic Data Handling (Sidebar Toggles)
+Include 'Alcohol Consumption': Because alcohol has a ~26% missing rate, users can toggle this variable on/off. Toggling it on reduces valid records to ~7,200; toggling it off retains ~9,900 records.
 
-## 6. Streamlit Dashboard Features
+Medical Binning (Ordinal Variables): Converts continuous variables (Age, BMI, Blood Pressure, etc.) into medical risk levels (1 to 5) to capture non-linear threshold effects.
 
-### 6.1 Dataset Overview
+6.2 Dataset Overview
+The dashboard displays dynamic summary metrics: Total Records, Valid Records, Heart Disease Cases, and Heart Disease Rate.
 
-The dashboard displays four summary metrics:
+6.3 Linear Analysis (Pearson Correlation)
+A horizontal bar chart displays the Pearson correlation coefficient between each selected variable and heart disease status.
 
-- Total Records
-- Valid Records
-- Heart Disease Cases
-- Heart Disease Rate
+Red represents positive correlation; Blue represents negative correlation.
 
-These metrics provide an overview of the dataset after the selected variables have been cleaned.
+6.4 Non-Linear Analysis (Random Forest Feature Importance)
+A machine learning model (Random Forest) is trained using class_weight='balanced' to address the class imbalance.
 
-### 6.2 Correlation Analysis
+A green bar chart visualizes the Feature Importance, revealing non-linear predictive power that Pearson correlation misses.
 
-The application calculates the Pearson correlation coefficient between each selected variable and heart disease status.
+6.5 Heart Disease Status Distribution & Heatmap
+A donut chart visualizes the proportion of positive and negative cases in the cleaned dataset.
 
-A horizontal bar chart displays the results:
+A heatmap displays pairwise correlations among the selected variables to identify potential overlap.
 
-- Red represents positive correlation.
-- Blue represents negative correlation.
-- Values closer to +1 or -1 indicate stronger linear associations.
-- Values closer to 0 indicate weaker linear associations.
+6.6 Cleaned Dataset Preview
+Users can enable the dataset preview option in the sidebar to inspect the processed records (including binned variables).
 
-The chart supports interactive exploration through Plotly.
-
-### 6.3 Correlation Statistics Table
-
-A table presents each variable's:
-
-- Pearson correlation coefficient
-- Absolute correlation coefficient
-- Correlation direction
-
-Users can download the correlation results as a CSV file.
-
-### 6.4 Heart Disease Status Distribution
-
-A donut chart visualizes the distribution of records with and without heart disease.
-
-This chart helps users understand the proportion of positive and negative cases in the cleaned dataset.
-
-### 6.5 Correlation Heatmap
-
-The heatmap displays pairwise Pearson correlations among the 10 selected variables and the target variable.
-
-It helps identify potential relationships between health indicators and possible overlap among explanatory variables.
-
-### 6.6 Cleaned Dataset Preview
-
-Users can enable the dataset preview option in the sidebar to inspect the cleaned records used in the analysis.
-
-## 7. Data Preparation
-
+7. Data Preparation
 The application performs the following preprocessing steps:
 
-1. Loads the CSV dataset.
-2. Selects the 10 specified variables and the target variable.
-3. Removes leading and trailing whitespace from text values.
-4. Converts the heart disease target from `Yes`/`No` to `1`/`0`.
-5. Encodes supported binary categorical variables.
-6. Converts continuous measurements to numeric types.
-7. Removes records with missing values in the selected columns.
-8. Calculates Pearson correlations using the cleaned data.
+Selects the specified variables and the target variable.
 
-The application excludes unrelated categorical variables rather than creating thousands of dummy variables.
+Removes leading and trailing whitespace from text values.
 
-## 8. Key Analytical Considerations
+Converts the target from Yes/No to 1/0, and encodes binary variables.
 
-### 8.1 Correlation Does Not Imply Causation
+Converts continuous measurements to numeric types.
 
-Pearson correlation measures linear association. A positive correlation does not establish that a variable causes heart disease, and a negative correlation does not establish a protective effect.
+Applies Complete Case Analysis (removes rows with missing values) to avoid artificial bias from imputation.
 
-### 8.2 Correlation Is Not a Complete Measure of Predictive Power
+Applies Medical Binning to continuous variables if toggled.
 
-A variable with a weak Pearson correlation may still contribute to a predictive model through nonlinear relationships or interactions with other variables.
+Trains a Random Forest model to extract feature importance scores.
 
-### 8.3 Class Imbalance
+8. Key Analytical Considerations
+8.1 The Limitation of Linear Correlation
+Pearson correlation measures only linear associations. In medical data, risk factors often have U-shaped curves or threshold effects (e.g., risk spikes only after BMI > 30). Thus, low Pearson scores (all < 0.05) do not mean variables are useless.
 
-The proportion of positive and negative cases should be assessed using the actual dataset after cleaning.
+8.2 The Power of Machine Learning
+Random Forest captures complex interactions. The model correctly identified Age as the dominant predictor, followed by BMI and Cholesterol, which aligns perfectly with clinical consensus.
 
-If the dataset is imbalanced, future predictive modeling should evaluate metrics such as recall, precision, F1-score, and ROC-AUC rather than relying on accuracy alone.
+8.3 Class Imbalance
+Because 80% of records are "No", a naive model would achieve 80% accuracy by always guessing "No". This project applies class_weight='balanced' in the Random Forest and emphasizes that future modeling must prioritize Recall and F1-Score over Accuracy.
 
-### 8.4 Data Encoding
+9. Limitations
+Not a Diagnostic Tool: This is an exploratory analysis, not a validated clinical system.
 
-Categorical variables must be encoded according to their actual meanings. For example, ordinal categories should not automatically be treated as equivalent binary categories.
+No Causation: Correlation and feature importance do not establish causation.
 
-The encoding of alcohol consumption and blood pressure variables should be verified against the original dataset documentation.
+Dataset Quality: The weak linear correlations and relatively low feature importance scores suggest high noise or synthetic elements in the dataset.
 
-### 8.5 Missing Data
+Missing Value Bias: Removing rows with missing data may affect representativeness.
 
-The current implementation removes rows with missing values in the selected variables. This can reduce the sample size and may introduce bias if missingness is systematic.
+10. Future Improvements
+Implementing predictive modeling (e.g., Logistic Regression vs. Random Forest) to evaluate Recall and F1-score.
 
-## 9. Limitations
+Investigating SHAP values for deeper machine learning interpretability.
 
-- The current dashboard focuses on correlation analysis rather than developing or validating a predictive model.
-- Pearson correlation captures linear associations and may not reveal nonlinear relationships.
-- Missing-value removal may affect the representativeness of the analyzed sample.
-- The analysis does not establish causation or control for potential confounding variables.
-- Findings depend on data quality, sample composition, and variable encoding.
+Using imputation methods (like KNN Imputer) to retain the Alcohol Consumption variable without losing 26% of the dataset.
 
-## 10. Future Improvements
+11. AI Disclosure
+Generative AI tools, including ChatGPT, were used to assist with code development, debugging, and documentation. The final implementation, analytical decisions, and reported findings were reviewed and validated by the project author.
 
-Potential extensions include:
-
-- Adding interactive filters for age and gender.
-- Exploring BMI and triglyceride relationships through scatter plots.
-- Engineering combined risk-related features for exploratory analysis.
-- Comparing logistic regression and nonlinear classification models.
-- Evaluating model performance using recall, F1-score, and ROC-AUC.
-- Investigating class imbalance using appropriate resampling methods.
-- Adding model interpretation tools to explain predictive results.
-
-These extensions should be implemented and evaluated before being described as completed application features.
-
-## 11. AI Disclosure
-
-Generative AI tools, including ChatGPT, were used to assist with code development, debugging, and documentation.
-
-The final implementation, analytical decisions, and reported findings should be reviewed and validated by the project author.
-
-## 12. Disclaimer
-
+12. Disclaimer
 This project is intended for educational and exploratory data analysis purposes only. It is not a validated clinical prediction system and must not be used as a substitute for professional medical advice, diagnosis, or treatment.
 
-## 13. Author
-
-**Jinxiang Xiong**
-
+13. Author
+Jinxiang Xiong
 Email: Xiongj18@msu.edu
+
+text

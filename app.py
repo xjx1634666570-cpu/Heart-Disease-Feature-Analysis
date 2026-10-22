@@ -1,24 +1,24 @@
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from sklearn.ensemble import RandomForestClassifier
 
 # ==========================================
 # 1. Page Configuration
 # ==========================================
 st.set_page_config(
-    page_title="Heart Disease Correlation Dashboard",
+    page_title="Heart Disease Feature Analysis",
     page_icon="❤️",
     layout="wide"
 )
 
-st.title("❤️ Heart Disease Correlation Dashboard")
-st.header("Heart Disease Risk Factor Analysis")
+st.title("❤️ Heart Disease Risk Factor Analysis")
+st.header("Linear Correlation vs. Model-Based Feature Importance")
 st.caption(
-    "Explore the relationships between health indicators "
-    "and heart disease status."
+    "Compare how variables rank under simple linear assumptions (Pearson) "
+    "versus a non-linear machine learning model (Random Forest)."
 )
 
 # ==========================================
@@ -28,11 +28,7 @@ st.caption(
 def load_data(file):
     return pd.read_csv(file)
 
-
-uploaded_file = st.sidebar.file_uploader(
-    "Upload Heart Disease Dataset (CSV)",
-    type=["csv"]
-)
+uploaded_file = st.sidebar.file_uploader("Upload Heart Disease Dataset (CSV)", type=["csv"])
 
 if uploaded_file is not None:
     df = load_data(uploaded_file)
@@ -40,447 +36,214 @@ else:
     try:
         df = load_data("heart_disease.csv")
     except FileNotFoundError:
-        st.error(
-            "heart_disease.csv was not found. "
-            "Place the CSV file in the same directory as app.py "
-            "or upload it using the sidebar."
-        )
+        st.error("heart_disease.csv not found. Place it in the same directory or upload via sidebar.")
         st.stop()
     except Exception as e:
         st.error(f"Failed to load dataset: {e}")
         st.stop()
 
 if df.empty:
-    st.error("The dataset is empty. Please check your CSV file.")
+    st.error("The dataset is empty.")
     st.stop()
 
 # ==========================================
-# 3. Select Variables for Analysis
+# 3. Sidebar Toggles (Variable Selection & Settings)
+# ==========================================
+st.sidebar.header("Data & Analysis Settings")
+
+# Dynamic Switch: Whether to include the alcohol consumption variable
+include_alcohol = st.sidebar.toggle(
+    "Include 'Alcohol Consumption'", 
+    value=False,
+    help="Warning: Including this variable will drop ~26% of rows due to high missing values."
+)
+
+if include_alcohol:
+    st.sidebar.warning("⚠️ Including Alcohol Consumption will reduce valid records to ~7,200.")
+    selected_cols = [
+        "BMI", "Blood Pressure", "Homocysteine Level", "Triglyceride Level",
+        "Cholesterol Level", "Gender", "Smoking", "Age", "High Blood Pressure", 
+        "Fasting Blood Sugar", "Alcohol Consumption"
+    ]
+    binary_cols = ["Gender", "Smoking", "High Blood Pressure", "Alcohol Consumption"]
+else:
+    st.sidebar.success("✅ Excluding Alcohol Consumption retains ~9,900 records.")
+    selected_cols = [
+        "BMI", "Blood Pressure", "Homocysteine Level", "Triglyceride Level",
+        "Cholesterol Level", "Gender", "Smoking", "Age", "High Blood Pressure", 
+        "Fasting Blood Sugar"
+    ]
+    binary_cols = ["Gender", "Smoking", "High Blood Pressure"]
+
+use_binning = st.sidebar.toggle("Use Medical Binning (Ordinal)", value=True)
+show_data = st.sidebar.checkbox("Show cleaned dataset", value=False)
+
+# ==========================================
+# 4. Select Variables & Data Cleaning
 # ==========================================
 target = "Heart Disease Status"
-
-selected_cols = [
-    "BMI",
-    "Blood Pressure",
-    "Homocysteine Level",
-    "Triglyceride Level",
-    "Alcohol Consumption",
-    "Cholesterol Level",
-    "Gender",
-    "Smoking",
-    "Age",
-    "High Blood Pressure"
-]
-
 required_cols = selected_cols + [target]
 
-missing_cols = [
-    col for col in required_cols
-    if col not in df.columns
-]
-
+missing_cols = [col for col in required_cols if col not in df.columns]
 if missing_cols:
-    st.error(
-        f"The following columns are missing: {missing_cols}\n\n"
-        f"Available columns: {df.columns.tolist()}"
-    )
+    st.error(f"Missing columns in dataset: {missing_cols}")
     st.stop()
 
-# Keep only the selected variables and target
 df_selected = df[required_cols].copy()
 
-# Remove leading and trailing whitespace from text values
-for col in df_selected.select_dtypes(
-    include=["object", "string"]
-).columns:
+# Clean text
+for col in df_selected.select_dtypes(include=["object", "string"]).columns:
     df_selected[col] = df_selected[col].str.strip()
 
-# ==========================================
-# 4. Data Cleaning and Encoding
-# ==========================================
-
-# Encode target variable
-df_selected[target] = df_selected[target].replace({
-    "No": 0,
-    "Yes": 1
-})
-
-# Encode binary categorical variables
-binary_cols = [
-    "Gender",
-    "Smoking",
-    "Alcohol Consumption",
-    "High Blood Pressure"
-]
-
-binary_mapping = {
-    "Yes": 1,
-    "No": 0,
-    "Male": 1,
-    "Female": 0,
-    "High": 1,
-    "Low": 0,
-    "Medium": 0
-}
+# Encoding
+df_selected[target] = df_selected[target].replace({"No": 0, "Yes": 1})
+binary_mapping = {"Yes": 1, "No": 0, "Male": 1, "Female": 0, "High": 1, "Low": 0, "Medium": 0}
 
 for col in binary_cols:
-    df_selected[col] = df_selected[col].replace(
-        binary_mapping
-    )
+    df_selected[col] = df_selected[col].replace(binary_mapping)
 
-# Convert continuous variables to numeric
+# Convert numeric
 numeric_cols = [
-    "BMI",
-    "Blood Pressure",
-    "Homocysteine Level",
-    "Triglyceride Level",
-    "Cholesterol Level",
-    "Age"
+    "BMI", "Blood Pressure", "Homocysteine Level", 
+    "Triglyceride Level", "Cholesterol Level", "Age", "Fasting Blood Sugar"
 ]
 
 for col in numeric_cols:
-    df_selected[col] = pd.to_numeric(
-        df_selected[col],
-        errors="coerce"
-    )
+    df_selected[col] = pd.to_numeric(df_selected[col], errors="coerce")
 
-df_selected[target] = pd.to_numeric(
-    df_selected[target],
-    errors="coerce"
-)
+df_selected[target] = pd.to_numeric(df_selected[target], errors="coerce")
 
-# Validate binary variables
-for col in binary_cols:
-    invalid_values = (
-        df_selected[col].notna()
-        & ~df_selected[col].isin([0, 1])
-    )
-
-    if invalid_values.any():
-        examples = (
-            df_selected.loc[invalid_values, col]
-            .astype(str)
-            .unique()[:5]
-            .tolist()
-        )
-
-        st.error(
-            f"Unrecognized values in '{col}': {examples}. "
-            "Please check the original data encoding."
-        )
-        st.stop()
-
-# Validate target variable
-invalid_target = (
-    df_selected[target].notna()
-    & ~df_selected[target].isin([0, 1])
-)
-
-if invalid_target.any():
-    st.error(
-        "'Heart Disease Status' must contain Yes/No "
-        "or 1/0 values."
-    )
-    st.stop()
-
-# Remove rows with missing values
-total_records = len(df_selected)
+# Complete Case Analysis
 df_clean = df_selected.dropna().copy()
-valid_records = len(df_clean)
 
 if df_clean.empty:
-    st.error(
-        "No valid records remain after cleaning. "
-        "Please check the dataset."
-    )
-    st.stop()
-
-if df_clean[target].nunique() < 2:
-    st.error(
-        "The target variable must contain both classes "
-        "to calculate correlations."
-    )
+    st.error("No valid records remain after cleaning.")
     st.stop()
 
 # ==========================================
-# 5. Sidebar Settings
+# 5. Medical Binning (Optional)
 # ==========================================
-st.sidebar.header("Analysis Settings")
+def apply_medical_binning(df):
+    df_binned = df.copy()
+    df_binned['BMI'] = pd.cut(df['BMI'], bins=[-np.inf, 18.5, 25, 30, 35, np.inf], labels=[1, 2, 3, 4, 5]).astype(float)
+    df_binned['Blood Pressure'] = pd.cut(df['Blood Pressure'], bins=[-np.inf, 90, 120, 130, 140, np.inf], labels=[1, 2, 3, 4, 5]).astype(float)
+    df_binned['Triglyceride Level'] = pd.cut(df['Triglyceride Level'], bins=[-np.inf, 100, 150, 200, 500, np.inf], labels=[1, 2, 3, 4, 5]).astype(float)
+    df_binned['Fasting Blood Sugar'] = pd.cut(df['Fasting Blood Sugar'], bins=[-np.inf, 70, 100, 126, 200, np.inf], labels=[1, 2, 3, 4, 5]).astype(float)
+    df_binned['Cholesterol Level'] = pd.cut(df['Cholesterol Level'], bins=[-np.inf, 150, 200, 240, 300, np.inf], labels=[1, 2, 3, 4, 5]).astype(float)
+    df_binned['Homocysteine Level'] = pd.cut(df['Homocysteine Level'], bins=[-np.inf, 5, 10, 15, 30, np.inf], labels=[1, 2, 3, 4, 5]).astype(float)
+    df_binned['Age'] = pd.cut(df['Age'], bins=[-np.inf, 30, 45, 60, 75, np.inf], labels=[1, 2, 3, 4, 5]).astype(float)
+    return df_binned
 
-st.sidebar.write(
-    "Only the 10 selected variables are included."
-)
-
-show_data = st.sidebar.checkbox(
-    "Show cleaned dataset",
-    value=False
-)
+if use_binning:
+    df_analysis = apply_medical_binning(df_clean)
+    st.info("💡 **Medical Binning is ON:** Continuous variables converted to ordinal risk levels (1-5).")
+else:
+    df_analysis = df_clean.copy()
+    st.warning("⚠️ **Raw Continuous Data is ON:** Using raw continuous values.")
 
 # ==========================================
 # 6. Dataset Overview
 # ==========================================
-heart_cases = int((df_clean[target] == 1).sum())
-no_heart_cases = int((df_clean[target] == 0).sum())
-
-heart_rate = df_clean[target].mean() * 100
+heart_cases = int((df_analysis[target] == 1).sum())
+no_heart_cases = int((df_analysis[target] == 0).sum())
+heart_rate = df_analysis[target].mean() * 100
 
 st.subheader("📊 Dataset Overview")
-
 col1, col2, col3, col4 = st.columns(4)
-
-col1.metric(
-    "Total Records",
-    f"{total_records:,}"
-)
-
-col2.metric(
-    "Valid Records",
-    f"{valid_records:,}",
-    delta=f"{valid_records - total_records:+,}"
-)
-
-col3.metric(
-    "Heart Disease Cases",
-    f"{heart_cases:,}"
-)
-
-col4.metric(
-    "Heart Disease Rate",
-    f"{heart_rate:.2f}%"
-)
-
+col1.metric("Total Valid Records", f"{len(df_analysis):,}")
+col2.metric("Heart Disease Cases", f"{heart_cases:,}")
+col3.metric("No Heart Disease", f"{no_heart_cases:,}")
+col4.metric("Heart Disease Rate", f"{heart_rate:.2f}%")
 st.divider()
 
 # ==========================================
-# 7. Correlation Analysis
+# 7. Calculations (Pearson & Random Forest)
 # ==========================================
-st.subheader("📈 Correlation Analysis")
+X = df_analysis[selected_cols].copy()
+y = df_analysis[target].copy()
 
-analysis_df = df_clean[
-    selected_cols + [target]
-].copy()
+# 1. Pearson Correlation
+correlations = X.corrwith(y, method='pearson').dropna()
 
-# Calculate only correlations with the target variable
-correlations = (
-    analysis_df.corr(numeric_only=True)[target]
-    .drop(labels=[target], errors="ignore")
-    .dropna()
-)
+# 2. Random Forest Feature Importance
+rf_model = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')
+rf_model.fit(X, y)
+importances = rf_model.feature_importances_
+importance_series = pd.Series(importances, index=X.columns).dropna()
 
-if correlations.empty:
-    st.error(
-        "Unable to calculate correlations. "
-        "Please check the variable data types."
-    )
-    st.stop()
-
-# Build correlation statistics table
-corr_table = pd.DataFrame({
+# Combine Results
+results_df = pd.DataFrame({
     "Variable": correlations.index,
-    "Correlation": correlations.values
-})
-
-corr_table["Absolute Correlation"] = (
-    corr_table["Correlation"].abs()
-)
-
-corr_table["Direction"] = np.where(
-    corr_table["Correlation"] > 0,
-    "Positive",
-    "Negative"
-)
-
-corr_table = corr_table.sort_values(
-    "Absolute Correlation",
-    ascending=False
-).reset_index(drop=True)
+    "Pearson r": correlations.values,
+    "Abs Pearson": correlations.abs().values,
+    "Feature Importance": importance_series[correlations.index].values
+}).sort_values("Feature Importance", ascending=False).reset_index(drop=True)
 
 # ==========================================
-# 8. Correlation Bar Chart
+# 8. Visualizations
 # ==========================================
-st.markdown(
-    "Red bars indicate positive correlations, while blue bars "
-    "indicate negative correlations. Values closer to -1 or +1 "
-    "represent stronger linear associations."
-)
+st.subheader("📈 1. Pearson Correlation (Linear Association)")
+plot_pearson = results_df.sort_values("Pearson r", ascending=True)
+colors_p = ["#E74C3C" if v > 0 else "#3498DB" for v in plot_pearson["Pearson r"]]
 
-plot_data = corr_table.sort_values(
-    "Correlation",
-    ascending=True
-)
+fig_pearson = go.Figure(go.Bar(
+    x=plot_pearson["Pearson r"], y=plot_pearson["Variable"],
+    orientation="h", marker_color=colors_p,
+    text=[f"{v:.3f}" for v in plot_pearson["Pearson r"]], textposition="outside"
+))
+fig_pearson.add_vline(x=0, line_dash="dash", line_color="gray")
+fig_pearson.update_layout(title="Pearson Correlation with Heart Disease", height=400, template="plotly_white", margin=dict(l=30, r=60, t=40, b=30))
+st.plotly_chart(fig_pearson, use_container_width=True)
 
-colors = [
-    "#E74C3C" if value > 0 else "#3498DB"
-    for value in plot_data["Correlation"]
-]
+st.divider()
 
-fig = go.Figure()
+st.subheader("🌲 2. Random Forest Feature Importance (Non-Linear)")
+st.markdown("""
+**Why Random Forest Feature Importance?** 
+Pearson correlation only captures linear relationships. In medicine, risk factors often have complex, non-linear interactions. 
+**Feature Importance** from a Random Forest model measures how much each variable contributes to the model's predictive accuracy. *(Note: The model is trained with `class_weight='balanced'` to account for class imbalance).*
+""")
 
-fig.add_trace(
-    go.Bar(
-        x=plot_data["Correlation"],
-        y=plot_data["Variable"],
-        orientation="h",
-        marker_color=colors,
-        text=[
-            f"{value:.3f}"
-            for value in plot_data["Correlation"]
-        ],
-        textposition="outside",
-        cliponaxis=False,
-        hovertemplate=(
-            "<b>%{y}</b><br>"
-            "Pearson r: %{x:.4f}"
-            "<extra></extra>"
-        )
-    )
-)
+plot_imp = results_df.sort_values("Feature Importance", ascending=True)
 
-fig.add_vline(
-    x=0,
-    line_dash="dash",
-    line_color="gray"
-)
-
-fig.update_layout(
-    title="10 Selected Variables Correlated with Heart Disease",
-    xaxis_title="Pearson Correlation Coefficient",
-    yaxis_title="Variables",
-    template="plotly_white",
-    height=550,
-    showlegend=False,
-    margin=dict(l=30, r=60, t=70, b=50)
-)
-
-st.plotly_chart(
-    fig,
-    use_container_width=True
-)
+fig_imp = go.Figure(go.Bar(
+    x=plot_imp["Feature Importance"], y=plot_imp["Variable"],
+    orientation="h", marker_color="#27AE60",
+    text=[f"{v:.3f}" for v in plot_imp["Feature Importance"]], textposition="outside"
+))
+fig_imp.update_layout(title="Random Forest Feature Importance", height=400, template="plotly_white", margin=dict(l=30, r=60, t=40, b=30))
+st.plotly_chart(fig_imp, use_container_width=True)
 
 # ==========================================
-# 9. Correlation Statistics Table
+# 9. Summary Table
 # ==========================================
-st.subheader("📋 Correlation Statistics")
-
+st.subheader("📋 Combined Statistical Summary")
+st.markdown("Compare how variables rank differently under linear correlation vs. machine learning importance.")
 st.dataframe(
-    corr_table.style.format({
-        "Correlation": "{:.4f}",
-        "Absolute Correlation": "{:.4f}"
-    }),
-    use_container_width=True,
-    hide_index=True
+    results_df.style.format({"Pearson r": "{:.4f}", "Abs Pearson": "{:.4f}", "Feature Importance": "{:.4f}"}),
+    use_container_width=True, hide_index=True
 )
 
-# Download correlation results
-csv_data = corr_table.to_csv(
-    index=False
-).encode("utf-8-sig")
-
+# Download Button
+csv_data = results_df.to_csv(index=False).encode("utf-8-sig")
 st.download_button(
-    label="⬇️ Download Correlation Results",
+    label="⬇️ Download Combined Results",
     data=csv_data,
-    file_name="heart_disease_correlations.csv",
+    file_name="heart_disease_feature_importance.csv",
     mime="text/csv"
 )
 
 # ==========================================
-# 10. Heart Disease Status Distribution
-# ==========================================
-st.divider()
-st.subheader("🥧 Heart Disease Status Distribution")
-
-status_df = pd.DataFrame({
-    "Status": [
-        "No Heart Disease",
-        "Heart Disease"
-    ],
-    "Count": [
-        no_heart_cases,
-        heart_cases
-    ]
-})
-
-fig_pie = px.pie(
-    status_df,
-    names="Status",
-    values="Count",
-    hole=0.45,
-    title="Heart Disease Status Distribution",
-    color="Status",
-    color_discrete_map={
-        "No Heart Disease": "#3498DB",
-        "Heart Disease": "#E74C3C"
-    }
-)
-
-fig_pie.update_traces(
-    textinfo="label+percent",
-    hovertemplate=(
-        "%{label}<br>"
-        "Count: %{value}<br>"
-        "Percentage: %{percent}"
-        "<extra></extra>"
-    )
-)
-
-st.plotly_chart(
-    fig_pie,
-    use_container_width=True
-)
-
-# ==========================================
-# 11. Correlation Heatmap
-# ==========================================
-st.divider()
-st.subheader("🌡️ Correlation Heatmap")
-
-heatmap_cols = selected_cols + [target]
-
-heatmap_data = analysis_df[
-    heatmap_cols
-].corr(numeric_only=True)
-
-fig_heatmap = px.imshow(
-    heatmap_data,
-    text_auto=".2f",
-    aspect="auto",
-    color_continuous_scale="RdBu_r",
-    zmin=-1,
-    zmax=1,
-    title="Correlation Matrix of Selected Variables"
-)
-
-fig_heatmap.update_layout(
-    height=650,
-    template="plotly_white"
-)
-
-st.plotly_chart(
-    fig_heatmap,
-    use_container_width=True
-)
-
-# ==========================================
-# 12. Display Cleaned Dataset
+# 10. Dataset & Footer
 # ==========================================
 if show_data:
     st.divider()
-    st.subheader("🔍 Cleaned Dataset")
+    st.subheader("🔍 Processed Dataset")
+    st.dataframe(df_analysis, use_container_width=True, hide_index=True)
 
-    st.dataframe(
-        df_clean,
-        use_container_width=True,
-        hide_index=True
-    )
-
-# ==========================================
-# 13. Footer
-# ==========================================
 st.divider()
-
 st.caption(
-    "Note: Pearson correlation measures linear association, "
-    "not causation. Results depend on data quality, variable "
-    "encoding, and missing-value handling. This dashboard is "
-    "intended for exploratory analysis, not medical diagnosis."
+    "Note: Feature importance indicates how useful a variable was to the model, "
+    "not a causal relationship. Alcohol Consumption has a high missing rate; "
+    "toggling it on/off demonstrates the trade-off between variable coverage and dataset size."
 )
